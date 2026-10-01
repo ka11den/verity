@@ -34,7 +34,7 @@
 		"zod-alternative"
 	],
 	"author": "ka11den",
-	"license": "",
+	"license": "MIT",
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.15",
 		"tsup": "^8.5.1",

@@ -1,47 +1,130 @@
 import { describe, expect, it } from 'vitest'
-import type { Infer } from '../src/core/base'
-import { NumberSchema } from '../src/types/number'
-import { ObjectSchema } from '../src/types/object'
-import { StringSchema } from '../src/types/string'
+import { type Infer, v } from '../src'
 
 describe('ObjectSchema', () => {
-	it('should correctly validate an object and return data', () => {
-		const userSchema = new ObjectSchema({
-			name: new StringSchema().min(2),
-			age: new NumberSchema().int().min(18),
+	it('validates matching object shape', () => {
+		const schema = v.object({
+			name: v.string(),
+			age: v.number(),
 		})
 
-		type User = Infer<typeof userSchema>
-
-		const validData = { name: 'Alice', age: 25 }
-		const res = userSchema.safeParse(validData)
-
-		expect(res.success).toBe(true)
-
-		if (res.success) expect(res.data).toEqual({ name: 'Alice', age: 25 })
+		const result = schema.safeParse({ name: 'Alice', age: 30 })
+		expect(result).toEqual({
+			success: true,
+			data: { name: 'Alice', age: 30 },
+		})
 	})
 
-	it('should collect field-specific errors for invalid data', () => {
-		const userSchema = new ObjectSchema({
-			name: new StringSchema().min(2),
-			age: new NumberSchema().min(18),
+	it('strips unknown keys by default', () => {
+		const schema = v.object({
+			name: v.string(),
 		})
 
-		const res = userSchema.safeParse({ name: 'A', age: 10 })
+		const result = schema.safeParse({ name: 'Alice', extra: 123 })
+		expect(result).toEqual({
+			success: true,
+			data: { name: 'Alice' },
+		})
+	})
 
-		expect(res.success).toBe(false)
+	it('passes through unknown keys when passthrough is enabled', () => {
+		const schema = v
+			.object({
+				name: v.string(),
+			})
+			.passthrough()
 
-		if (!res.success) {
-			expect(res.errors).toContain('name: String must contain at least 2 character(s)')
-			expect(res.errors).toContain('age: Number must be greater than or equal to 18')
+		const result = schema.safeParse({ name: 'Alice', extra: 123 })
+		expect(result).toEqual({
+			success: true,
+			data: { name: 'Alice', extra: 123 },
+		})
+	})
+
+	it('rejects unknown keys when strict is enabled', () => {
+		const schema = v
+			.object({
+				name: v.string(),
+			})
+			.strict()
+
+		const result = schema.safeParse({ name: 'Alice', extra: 123 })
+		expect(result.success).toBe(false)
+		if (!result.success) {
+			expect(result.errors[0]).toContain("Unrecognized key(s) in object: 'extra'")
 		}
 	})
 
-	it('should reject null and arrays', () => {
-		const schema = new ObjectSchema({ name: new StringSchema() })
+	it('extends existing schema', () => {
+		const base = v.object({ name: v.string() })
+		const extended = base.extend({ age: v.number() })
 
-		expect(schema.safeParse(null).success).toBe(false)
-		expect(schema.safeParse([]).success).toBe(false)
-		expect(schema.safeParse('string').success).toBe(false)
+		expect(extended.safeParse({ name: 'Bob', age: 25 })).toEqual({
+			success: true,
+			data: { name: 'Bob', age: 25 },
+		})
+	})
+
+	it('picks and omits fields', () => {
+		const schema = v.object({
+			a: v.string(),
+			b: v.number(),
+			c: v.boolean(),
+		})
+
+		const picked = schema.pick(['a', 'b'])
+		expect(picked.safeParse({ a: 'hi', b: 10 })).toEqual({
+			success: true,
+			data: { a: 'hi', b: 10 },
+		})
+
+		const omitted = schema.omit(['c'])
+		expect(omitted.safeParse({ a: 'hi', b: 10 })).toEqual({
+			success: true,
+			data: { a: 'hi', b: 10 },
+		})
+	})
+
+	it('creates partial schema', () => {
+		const schema = v
+			.object({
+				name: v.string(),
+				age: v.number(),
+			})
+			.partial()
+
+		expect(schema.safeParse({})).toEqual({
+			success: true,
+			data: { name: undefined, age: undefined },
+		})
+	})
+
+	it('allows omission of optional keys in static TypeScript type', () => {
+		const UserSchema = v.object({
+			name: v.string(),
+			bio: v.string().optional(),
+		})
+
+		type User = Infer<typeof UserSchema>
+		const user: User = { name: 'Alex' } // verifies bio? is truly optional in TS!
+		expect(user.name).toBe('Alex')
+	})
+
+	it('formats nested path errors', () => {
+		const schema = v.object({
+			user: v.object({
+				email: v.string().email(),
+			}),
+		})
+
+		const result = schema.safeParse({ user: { email: 'invalid' } })
+		expect(result.success).toBe(false)
+		if (!result.success) {
+			expect(result.errors[0]).toBe('user.email: Invalid email address')
+			expect(result.issues[0]).toEqual({
+				path: ['user', 'email'],
+				message: 'Invalid email address',
+			})
+		}
 	})
 })

@@ -1,17 +1,18 @@
-import { BaseSchema, type SafeParseResult } from '../core/base'
+import { BaseSchema, createSafeError, createSafeErrors, type SafeParseResult } from '../core/base'
 
 export class NumberSchema extends BaseSchema<number> {
 	public safeParse(input: unknown): SafeParseResult<number> {
 		if (typeof input !== 'number' || Number.isNaN(input)) {
-			return {
-				success: false,
-				errors: [`Expected number, received ${Number.isNaN(input) ? 'NaN' : typeof input}`],
-			}
+			return createSafeError(
+				`Expected number, received ${Number.isNaN(input) ? 'NaN' : typeof input}`,
+			)
 		}
 
 		const errors = this.runChecks(input)
 
-		if (errors.length > 0) return { success: false, errors }
+		if (errors.length > 0) {
+			return createSafeErrors(errors.map((msg) => ({ path: [], message: msg })))
+		}
 
 		return {
 			success: true,
@@ -19,9 +20,30 @@ export class NumberSchema extends BaseSchema<number> {
 		}
 	}
 
-	public min(min: number, message?: string) {
+	public async safeParseAsync(input: unknown): Promise<SafeParseResult<number>> {
+		if (typeof input !== 'number' || Number.isNaN(input)) {
+			return createSafeError(
+				`Expected number, received ${Number.isNaN(input) ? 'NaN' : typeof input}`,
+			)
+		}
+
+		const errors = await this.runChecksAsync(input)
+
+		if (errors.length > 0) {
+			return createSafeErrors(errors.map((msg) => ({ path: [], message: msg })))
+		}
+
+		return {
+			success: true,
+			data: input,
+		}
+	}
+
+	public min(min: number, message?: string): this {
 		this.checks.push((value: number) => {
-			if (value < min) return message ?? `Number must be greater than or equal to ${min}`
+			if (value < min) {
+				return message ?? `Number must be greater than or equal to ${min}`
+			}
 
 			return null
 		})
@@ -29,9 +51,11 @@ export class NumberSchema extends BaseSchema<number> {
 		return this
 	}
 
-	public max(max: number, message?: string) {
+	public max(max: number, message?: string): this {
 		this.checks.push((value: number) => {
-			if (value > max) return message ?? `Number must be less than or equal to ${max}`
+			if (value > max) {
+				return message ?? `Number must be less than or equal to ${max}`
+			}
 
 			return null
 		})
@@ -39,9 +63,91 @@ export class NumberSchema extends BaseSchema<number> {
 		return this
 	}
 
-	public int(message?: string) {
+	public int(message?: string): this {
 		this.checks.push((value: number) => {
-			if (!Number.isInteger(value)) return message ?? 'Number must be an integer'
+			if (!Number.isInteger(value)) {
+				return message ?? 'Number must be an integer'
+			}
+
+			return null
+		})
+
+		return this
+	}
+
+	public positive(message?: string): this {
+		this.checks.push((value: number) => {
+			if (value <= 0) {
+				return message ?? 'Number must be positive'
+			}
+
+			return null
+		})
+
+		return this
+	}
+
+	public nonnegative(message?: string): this {
+		this.checks.push((value: number) => {
+			if (value < 0) {
+				return message ?? 'Number must be non-negative'
+			}
+
+			return null
+		})
+
+		return this
+	}
+
+	public negative(message?: string): this {
+		this.checks.push((value: number) => {
+			if (value >= 0) {
+				return message ?? 'Number must be negative'
+			}
+
+			return null
+		})
+
+		return this
+	}
+
+	public nonpositive(message?: string): this {
+		this.checks.push((value: number) => {
+			if (value > 0) {
+				return message ?? 'Number must be non-positive'
+			}
+
+			return null
+		})
+
+		return this
+	}
+
+	public finite(message?: string): this {
+		this.checks.push((value: number) => {
+			if (!Number.isFinite(value)) {
+				return message ?? 'Number must be finite'
+			}
+
+			return null
+		})
+
+		return this
+	}
+
+	public multipleOf(step: number, message?: string): this {
+		this.checks.push((value: number) => {
+			if (step <= 0) {
+				return 'Step must be greater than 0'
+			}
+
+			// Precision handling for floating point numbers
+			const quotient = value / step
+			const isMultiple = Math.abs(quotient - Math.round(quotient)) < 1e-10
+
+			if (!isMultiple) {
+				return message ?? `Number must be a multiple of ${step}`
+			}
 
 			return null
 		})

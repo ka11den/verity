@@ -9,9 +9,8 @@ export function isEmail(val: string): boolean {
 
 export function emailValidator(message?: string): Validator<string> {
 	return (value: string) => {
-		if (!isEmail(value)) {
-			return message ?? 'Invalid email address'
-		}
+		if (!isEmail(value)) return message ?? 'Invalid email address'
+
 		return null
 	}
 }
