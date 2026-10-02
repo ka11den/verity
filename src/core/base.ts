@@ -1,89 +1,38 @@
-import type { SafeParseError, SafeParseResult, ValidationIssue, Validator } from './types'
+import type { DefaultSchema } from '../modifiers/default.js'
+import type { NullableSchema } from '../modifiers/nullable.js'
+import type { OptionalSchema } from '../modifiers/optional.js'
+import type { TransformSchema } from '../modifiers/transform.js'
+import { VerityError } from './errors.js'
+import type { SafeParseResult, Validator } from './types.js'
+import { isPromise } from './utils.js'
 
-export type { Infer, SafeParseResult, ValidationIssue, Validator } from './types'
-
-export function formatPath(path: (string | number)[]): string {
-	return path.reduce<string>((acc, segment, index) => {
-		if (index === 0) {
-			return typeof segment === 'number' ? `[${segment}]` : String(segment)
-		}
-		return typeof segment === 'number' ? `${acc}[${segment}]` : `${acc}.${segment}`
-	}, '')
-}
-
-export function createSafeError(message: string, path: (string | number)[] = []): SafeParseError {
-	const formatted = path.length > 0 ? `${formatPath(path)}: ${message}` : message
-	return {
-		success: false,
-		errors: [formatted],
-		issues: [{ path, message }],
-	}
-}
-
-export function createSafeErrors(issues: ValidationIssue[]): SafeParseError {
-	const errors = issues.map((issue) =>
-		issue.path.length > 0 ? `${formatPath(issue.path)}: ${issue.message}` : issue.message,
-	)
-	return {
-		success: false,
-		errors,
-		issues,
-	}
-}
-
-export class VerityError extends Error {
-	public readonly errors: string[]
-	public readonly issues: ValidationIssue[]
-
-	constructor(issues: ValidationIssue[] | string[]) {
-		const normalizedIssues: ValidationIssue[] =
-			issues.length > 0 && typeof issues[0] === 'string'
-				? (issues as string[]).map((message) => ({ path: [], message }))
-				: (issues as ValidationIssue[])
-
-		const errorStrings = normalizedIssues.map((issue) =>
-			issue.path.length > 0 ? `${formatPath(issue.path)}: ${issue.message}` : issue.message,
-		)
-
-		super(errorStrings.join(', '))
-		this.name = 'VerityError'
-		this.issues = normalizedIssues
-		this.errors = errorStrings
-
-		Object.setPrototypeOf(this, VerityError.prototype)
-	}
-
-	public flatten(): { formErrors: string[]; fieldErrors: Record<string, string[]> } {
-		const formErrors: string[] = []
-		const fieldErrors: Record<string, string[]> = {}
-
-		for (const issue of this.issues) {
-			if (issue.path.length === 0) {
-				formErrors.push(issue.message)
-			} else {
-				const key = formatPath(issue.path)
-				if (!fieldErrors[key]) {
-					fieldErrors[key] = []
-				}
-				fieldErrors[key].push(issue.message)
-			}
-		}
-
-		return { formErrors, fieldErrors }
-	}
-}
+export type {
+	Infer,
+	SafeParseResult,
+	ValidationIssue,
+	Validator,
+} from './types.js'
 
 export abstract class BaseSchema<Output> {
 	declare readonly _output: Output
 
 	protected checks: Validator<Output>[] = []
 
+	private static _registry: {
+		Optional?: new <T>(inner: BaseSchema<T>) => BaseSchema<T | undefined>
+		Nullable?: new <T>(inner: BaseSchema<T>) => BaseSchema<T | null>
+		Default?: new <T>(inner: BaseSchema<T>, dv: T | (() => T)) => BaseSchema<T>
+		Transform?: new <I, O>(inner: BaseSchema<I>, fn: (v: I) => O | Promise<O>) => BaseSchema<O>
+	} = {}
+
+	public static registerModifiers(entries: Partial<typeof BaseSchema._registry>): void {
+		Object.assign(BaseSchema._registry, entries)
+	}
+
 	public parse(input: unknown): Output {
 		const result = this.safeParse(input)
 
-		if (!result.success) {
-			throw new VerityError(result.issues)
-		}
+		if (!result.success) throw new VerityError(result.issues)
 
 		return result.data
 	}
@@ -91,14 +40,12 @@ export abstract class BaseSchema<Output> {
 	public async parseAsync(input: unknown): Promise<Output> {
 		const result = await this.safeParseAsync(input)
 
-		if (!result.success) {
-			throw new VerityError(result.issues)
-		}
+		if (!result.success) throw new VerityError(result.issues)
 
 		return result.data
 	}
 
-	abstract safeParse(input: unknown): SafeParseResult<Output>
+	public abstract safeParse(input: unknown): SafeParseResult<Output>
 
 	public async safeParseAsync(input: unknown): Promise<SafeParseResult<Output>> {
 		return this.safeParse(input)
@@ -109,16 +56,12 @@ export abstract class BaseSchema<Output> {
 
 		for (const check of this.checks) {
 			const error = check(value)
-
-			if (error && typeof (error as any).then === 'function') {
+			if (isPromise<string | null | undefined>(error))
 				throw new Error(
 					'Encountered asynchronous check during synchronous parse; use parseAsync() or safeParseAsync() instead.',
 				)
-			}
 
-			if (error) {
-				errors.push(error as string)
-			}
+			if (error) errors.push(error)
 		}
 
 		return errors
@@ -130,9 +73,7 @@ export abstract class BaseSchema<Output> {
 		for (const check of this.checks) {
 			const error = await check(value)
 
-			if (error) {
-				errors.push(error)
-			}
+			if (error) errors.push(error)
 		}
 
 		return errors
@@ -144,19 +85,14 @@ export abstract class BaseSchema<Output> {
 	): this {
 		this.checks.push((value: Output) => {
 			const result = predicate(value)
+			if (isPromise<boolean>(result)) {
+				return result.then((valid) => {
+					if (!valid) return typeof message === 'function' ? message(value) : message
 
-			if (result && typeof (result as any).then === 'function') {
-				return (result as Promise<boolean>).then((valid) => {
-					if (!valid) {
-						return typeof message === 'function' ? message(value) : message
-					}
 					return null
 				})
 			}
-
-			if (!result) {
-				return typeof message === 'function' ? message(value) : message
-			}
+			if (!result) return typeof message === 'function' ? message(value) : message
 
 			return null
 		})
@@ -167,19 +103,35 @@ export abstract class BaseSchema<Output> {
 	public transform<NewOutput>(
 		fn: (value: Output) => NewOutput | Promise<NewOutput>,
 	): TransformSchema<Output, NewOutput> {
-		return new TransformSchema(this, fn)
+		const { Transform } = BaseSchema._registry
+
+		if (!Transform) throw new Error('TransformSchema is not registered.')
+
+		return new Transform(this, fn) as unknown as TransformSchema<Output, NewOutput>
 	}
 
 	public optional(): OptionalSchema<Output> {
-		return new OptionalSchema(this)
+		const { Optional } = BaseSchema._registry
+
+		if (!Optional) throw new Error('OptionalSchema is not registered.')
+
+		return new Optional(this) as unknown as OptionalSchema<Output>
 	}
 
 	public nullable(): NullableSchema<Output> {
-		return new NullableSchema(this)
+		const { Nullable } = BaseSchema._registry
+
+		if (!Nullable) throw new Error('NullableSchema is not registered.')
+
+		return new Nullable(this) as unknown as NullableSchema<Output>
 	}
 
 	public default(defaultValue: Output | (() => Output)): DefaultSchema<Output> {
-		return new DefaultSchema(this, defaultValue)
+		const { Default } = BaseSchema._registry
+
+		if (!Default) throw new Error('DefaultSchema is not registered.')
+
+		return new Default(this, defaultValue) as unknown as DefaultSchema<Output>
 	}
 
 	public defaultValue(defaultValue: Output | (() => Output)): DefaultSchema<Output> {
@@ -187,155 +139,5 @@ export abstract class BaseSchema<Output> {
 	}
 }
 
-export class OptionalSchema<T> extends BaseSchema<T | undefined> {
-	constructor(public readonly innerSchema: BaseSchema<T>) {
-		super()
-	}
-
-	public safeParse(input: unknown): SafeParseResult<T | undefined> {
-		if (input === undefined) {
-			return {
-				success: true,
-				data: undefined,
-			}
-		}
-
-		return this.innerSchema.safeParse(input)
-	}
-
-	public async safeParseAsync(input: unknown): Promise<SafeParseResult<T | undefined>> {
-		if (input === undefined) {
-			return {
-				success: true,
-				data: undefined,
-			}
-		}
-
-		return this.innerSchema.safeParseAsync(input)
-	}
-}
-
-export class NullableSchema<T> extends BaseSchema<T | null> {
-	constructor(public readonly innerSchema: BaseSchema<T>) {
-		super()
-	}
-
-	public safeParse(input: unknown): SafeParseResult<T | null> {
-		if (input === null) {
-			return {
-				success: true,
-				data: null,
-			}
-		}
-
-		return this.innerSchema.safeParse(input)
-	}
-
-	public async safeParseAsync(input: unknown): Promise<SafeParseResult<T | null>> {
-		if (input === null) {
-			return {
-				success: true,
-				data: null,
-			}
-		}
-
-		return this.innerSchema.safeParseAsync(input)
-	}
-}
-
-export class DefaultSchema<T> extends BaseSchema<T> {
-	protected readonly _defaultValue: T | (() => T)
-
-	constructor(
-		public readonly innerSchema: BaseSchema<T>,
-		defaultValue: T | (() => T),
-	) {
-		super()
-		this._defaultValue = defaultValue
-	}
-
-	public getDefaultValue(): T {
-		return typeof this._defaultValue === 'function'
-			? (this._defaultValue as () => T)()
-			: this._defaultValue
-	}
-
-	public safeParse(input: unknown): SafeParseResult<T> {
-		if (input === undefined) {
-			return {
-				success: true,
-				data: this.getDefaultValue(),
-			}
-		}
-
-		return this.innerSchema.safeParse(input)
-	}
-
-	public async safeParseAsync(input: unknown): Promise<SafeParseResult<T>> {
-		if (input === undefined) {
-			return {
-				success: true,
-				data: this.getDefaultValue(),
-			}
-		}
-
-		return this.innerSchema.safeParseAsync(input)
-	}
-}
-
-export class TransformSchema<Input, Output> extends BaseSchema<Output> {
-	constructor(
-		public readonly innerSchema: BaseSchema<Input>,
-		public readonly transformFn: (value: Input) => Output | Promise<Output>,
-	) {
-		super()
-	}
-
-	public safeParse(input: unknown): SafeParseResult<Output> {
-		const innerResult = this.innerSchema.safeParse(input)
-
-		if (!innerResult.success) {
-			return innerResult
-		}
-
-		const transformed = this.transformFn(innerResult.data)
-
-		if (transformed && typeof (transformed as any).then === 'function') {
-			throw new Error(
-				'Encountered asynchronous transform during synchronous parse; use parseAsync() or safeParseAsync() instead.',
-			)
-		}
-
-		const output = transformed as Output
-		const errors = this.runChecks(output)
-
-		if (errors.length > 0) {
-			return createSafeErrors(errors.map((msg) => ({ path: [], message: msg })))
-		}
-
-		return {
-			success: true,
-			data: output,
-		}
-	}
-
-	public async safeParseAsync(input: unknown): Promise<SafeParseResult<Output>> {
-		const innerResult = await this.innerSchema.safeParseAsync(input)
-
-		if (!innerResult.success) {
-			return innerResult
-		}
-
-		const transformed = await this.transformFn(innerResult.data)
-		const errors = await this.runChecksAsync(transformed)
-
-		if (errors.length > 0) {
-			return createSafeErrors(errors.map((msg) => ({ path: [], message: msg })))
-		}
-
-		return {
-			success: true,
-			data: transformed,
-		}
-	}
-}
+export { createSafeError, createSafeErrors, VerityError } from './errors.js'
+export { formatPath } from './utils.js'

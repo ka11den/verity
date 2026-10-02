@@ -1,11 +1,6 @@
-import {
-	BaseSchema,
-	createSafeError,
-	createSafeErrors,
-	type SafeParseResult,
-	type ValidationIssue,
-} from '../core/base'
-import type { Infer } from '../core/types'
+import { BaseSchema, type SafeParseResult } from '../core/base.js'
+import { createSafeError, createSafeErrors } from '../core/errors.js'
+import type { Infer } from '../core/types.js'
 
 export class ArraySchema<T extends BaseSchema<any>> extends BaseSchema<Infer<T>[]> {
 	constructor(public readonly elementSchema: T) {
@@ -14,31 +9,33 @@ export class ArraySchema<T extends BaseSchema<any>> extends BaseSchema<Infer<T>[
 
 	public min(length: number, message?: string): this {
 		this.checks.push((value: Infer<T>[]) => {
-			if (value.length < length) {
+			if (value.length < length)
 				return message ?? `Array must contain at least ${length} element(s)`
-			}
+
 			return null
 		})
+
 		return this
 	}
 
 	public max(length: number, message?: string): this {
 		this.checks.push((value: Infer<T>[]) => {
-			if (value.length > length) {
-				return message ?? `Array must contain at most ${length} element(s)`
-			}
+			if (value.length > length) return message ?? `Array must contain at most ${length} element(s)`
+
 			return null
 		})
+
 		return this
 	}
 
 	public length(length: number, message?: string): this {
 		this.checks.push((value: Infer<T>[]) => {
-			if (value.length !== length) {
+			if (value.length !== length)
 				return message ?? `Array must contain exactly ${length} element(s)`
-			}
+
 			return null
 		})
+
 		return this
 	}
 
@@ -47,15 +44,15 @@ export class ArraySchema<T extends BaseSchema<any>> extends BaseSchema<Infer<T>[
 	}
 
 	public safeParse(input: unknown): SafeParseResult<Infer<T>[]> {
-		if (!Array.isArray(input)) {
+		if (!Array.isArray(input))
 			return createSafeError(`Expected array, received ${input === null ? 'null' : typeof input}`)
-		}
 
 		const data: Infer<T>[] = []
-		const issues: ValidationIssue[] = []
+		const issues: { path: (string | number)[]; message: string }[] = []
 
 		for (let i = 0; i < input.length; i++) {
 			const result = this.elementSchema.safeParse(input[i])
+
 			if (result.success) {
 				data.push(result.data)
 			} else {
@@ -68,14 +65,12 @@ export class ArraySchema<T extends BaseSchema<any>> extends BaseSchema<Infer<T>[
 			}
 		}
 
-		if (issues.length > 0) {
-			return createSafeErrors(issues)
-		}
+		if (issues.length > 0) return createSafeErrors(issues)
 
 		const arrayErrors = this.runChecks(data)
-		if (arrayErrors.length > 0) {
+
+		if (arrayErrors.length > 0)
 			return createSafeErrors(arrayErrors.map((msg) => ({ path: [], message: msg })))
-		}
 
 		return {
 			success: true,
@@ -84,15 +79,15 @@ export class ArraySchema<T extends BaseSchema<any>> extends BaseSchema<Infer<T>[
 	}
 
 	public async safeParseAsync(input: unknown): Promise<SafeParseResult<Infer<T>[]>> {
-		if (!Array.isArray(input)) {
+		if (!Array.isArray(input))
 			return createSafeError(`Expected array, received ${input === null ? 'null' : typeof input}`)
-		}
 
 		const data: Infer<T>[] = []
-		const issues: ValidationIssue[] = []
+		const issues: { path: (string | number)[]; message: string }[] = []
 
 		for (let i = 0; i < input.length; i++) {
 			const result = await this.elementSchema.safeParseAsync(input[i])
+
 			if (result.success) {
 				data.push(result.data)
 			} else {
@@ -105,11 +100,10 @@ export class ArraySchema<T extends BaseSchema<any>> extends BaseSchema<Infer<T>[
 			}
 		}
 
-		if (issues.length > 0) {
-			return createSafeErrors(issues)
-		}
+		if (issues.length > 0) return createSafeErrors(issues)
 
 		const arrayErrors = await this.runChecksAsync(data)
+
 		if (arrayErrors.length > 0) {
 			return createSafeErrors(arrayErrors.map((msg) => ({ path: [], message: msg })))
 		}

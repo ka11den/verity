@@ -1,4 +1,4 @@
-import type { BaseSchema } from './base'
+import type { BaseSchema } from './base.js'
 
 export interface ValidationIssue {
 	path: (string | number)[]
@@ -39,5 +39,7 @@ type RequiredKeys<T extends SchemaShape> = {
 }[keyof T]
 
 export type InferShape<T extends SchemaShape> = Prettify<
-	{ [K in OptionalKeys<T>]?: Infer<T[K]> } & { [K in RequiredKeys<T>]: Infer<T[K]> }
+	{ [K in OptionalKeys<T>]?: Infer<T[K]> } & {
+		[K in RequiredKeys<T>]: Infer<T[K]>
+	}
 >

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Infer } from '../src/core/base'
-import { BooleanSchema } from '../src/types/boolean'
+import { BooleanSchema } from '../src/schemas/boolean'
 
 describe('BooleanSchema', () => {
 	it('should accept true and false', () => {

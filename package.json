@@ -1,6 +1,7 @@
 {
 	"name": "verity",
 	"version": "1.0.0",
+	"type": "module",
 	"description": "lightweight, type-safe schema validation library with TypeScript static type inference",
 	"main": "./dist/index.js",
 	"module": "./dist/index.mjs",

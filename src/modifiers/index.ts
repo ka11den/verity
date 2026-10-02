@@ -1,4 +1,4 @@
-export * from './default'
-export * from './nullable'
-export * from './optional'
-export * from './transform'
+export { DefaultSchema } from './default.js'
+export { NullableSchema } from './nullable.js'
+export { OptionalSchema } from './optional.js'
+export { TransformSchema } from './transform.js'

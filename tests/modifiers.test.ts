@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { Infer } from '../src/core/base'
-import { NumberSchema } from '../src/types/number'
-import { ObjectSchema } from '../src/types/object'
-import { StringSchema } from '../src/types/string'
+import { NumberSchema } from '../src/schemas/number'
+import { ObjectSchema } from '../src/schemas/object'
+import { StringSchema } from '../src/schemas/string'
 
 describe('Modifiers (optional, nullable, default)', () => {
 	it('optional should allow undefined and validate provided value', () => {

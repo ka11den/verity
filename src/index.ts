@@ -1,5 +1,5 @@
-import type { BaseSchema } from './core/base'
-import type { SchemaShape } from './core/types'
+import type { BaseSchema } from './core/base.js'
+import type { SchemaShape } from './core/types.js'
 import {
 	AnySchema,
 	ArraySchema,
@@ -17,7 +17,7 @@ import {
 	StringSchema,
 	UnionSchema,
 	UnknownSchema,
-} from './types'
+} from './schemas/index.js'
 
 export const verity = {
 	string: () => new StringSchema(),
@@ -52,15 +52,12 @@ export const verity = {
 
 export const v = verity
 
+export { BaseSchema } from './core/base.js'
 export {
-	BaseSchema,
-	DefaultSchema,
-	formatPath,
-	NullableSchema,
-	OptionalSchema,
-	TransformSchema,
+	createSafeError,
+	createSafeErrors,
 	VerityError,
-} from './core/base'
+} from './core/errors.js'
 export type {
 	Infer,
 	InferShape,
@@ -71,7 +68,14 @@ export type {
 	SchemaShape,
 	ValidationIssue,
 	Validator,
-} from './core/types'
+} from './core/types.js'
+export { formatPath, isPromise } from './core/utils.js'
+export {
+	DefaultSchema,
+	NullableSchema,
+	OptionalSchema,
+	TransformSchema,
+} from './modifiers/index.js'
 export {
 	AnySchema,
 	ArraySchema,
@@ -89,5 +93,5 @@ export {
 	StringSchema,
 	UnionSchema,
 	UnknownSchema,
-} from './types'
-export { EMAIL_REGEX, emailValidator, isEmail } from './validators'
+} from './schemas/index.js'
+export { EMAIL_REGEX, emailValidator, isEmail } from './validators/index.js'
